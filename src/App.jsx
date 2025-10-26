@@ -1,28 +1,213 @@
-import { useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react';
+import Sidebar from './components/Sidebar.jsx';
+import Navbar from './components/Navbar.jsx';
+import Dashboard from './components/Dashboard.jsx';
+import Tasks from './components/Tasks.jsx';
+import TaskDetails from './components/TaskDetails.jsx';
+import Teams from './components/Teams.jsx';
+import Reports from './components/Reports.jsx';
+import Settings from './components/Settings.jsx';
+import Auth from './components/Auth.jsx';
 
-function App() {
-  const [count, setCount] = useState(0)
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center">
-      <div className="bg-white p-8 rounded-lg shadow-lg">
-        <h1 className="text-3xl font-bold text-gray-800 mb-4">
-          Vibe Coding Platform
-        </h1>
-        <p className="text-gray-600 mb-6">
-          Your AI-powered development environment
-        </p>
-        <div className="text-center">
-          <button
-            onClick={() => setCount(count + 1)}
-            className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded"
-          >
-            Count is {count}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
+function useHashRoute() {
+  const [route, setRoute] = useState(() => window.location.hash.replace('#', '') || '/dashboard');
+  useEffect(() => {
+    const handler = () => setRoute(window.location.hash.replace('#', '') || '/dashboard');
+    window.addEventListener('hashchange', handler);
+    return () => window.removeEventListener('hashchange', handler);
+  }, []);
+  const navigate = (path) => {
+    const hash = path.startsWith('/') ? path : `/${path}`;
+    window.location.hash = hash;
+    setRoute(hash);
+  };
+  return [route, navigate];
 }
 
-export default App
+function seededDummyData() {
+  const users = [
+    { id: 1, name: 'Ava Morgan', role: 'Admin' },
+    { id: 2, name: 'Liam Patel', role: 'Manager' },
+    { id: 3, name: 'Noah Kim', role: 'Employee' },
+    { id: 4, name: 'Mia Chen', role: 'Employee' },
+  ];
+  const now = new Date();
+  const addDays = (d) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + d).toISOString();
+  const tasks = [
+    { id: 101, title: 'Design landing hero', assignee: 'Mia Chen', priority: 'High', status: 'In Progress', deadline: addDays(2), description: 'Create a modern hero section with gradient background and CTA.', comments: [], activity: [{ text: 'Task created', time: 'Today' }] },
+    { id: 102, title: 'API integration', assignee: 'Noah Kim', priority: 'Medium', status: 'Pending', deadline: addDays(5), description: 'Integrate backend endpoints for tasks.', comments: [], activity: [{ text: 'Assigned to Noah', time: 'Yesterday' }] },
+    { id: 103, title: 'Write test cases', assignee: 'Liam Patel', priority: 'Low', status: 'Completed', deadline: addDays(-1), description: 'Write unit tests for core modules.', comments: [], activity: [{ text: 'Marked completed', time: 'Today' }] },
+    { id: 104, title: 'Update brand colors', assignee: 'Ava Morgan', priority: 'High', status: 'Pending', deadline: addDays(-3), description: 'Switch primary to indigo and audit components.', comments: [], activity: [{ text: 'Due date passed', time: '3 days ago' }] },
+  ];
+  const activity = [
+    { text: 'Noah commented on API integration', time: '5m ago' },
+    { text: 'Mia moved Design landing hero to In Progress', time: '1h ago' },
+    { text: 'Ava created task Update brand colors', time: '2d ago' },
+  ];
+  return { users, tasks, activity };
+}
+
+export default function App() {
+  const [route, navigate] = useHashRoute();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [theme, setTheme] = useState(() => (document.documentElement.classList.contains('dark') ? 'dark' : 'light'));
+
+  const seed = useMemo(() => seededDummyData(), []);
+  const [tasks, setTasks] = useState(seed.tasks);
+  const [users, setUsers] = useState(seed.users);
+  const [activity, setActivity] = useState(seed.activity);
+
+  const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => {
+    if (theme === 'dark') document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
+  }, [theme]);
+
+  const go = (key) => {
+    if (key === 'logout') {
+      setCurrentUser(null);
+      navigate('/login');
+      return;
+    }
+    navigate(`/${key}`);
+  };
+
+  useEffect(() => {
+    if (!window.location.hash) navigate('/login');
+  }, []);
+
+  const handleLogin = (user) => {
+    setCurrentUser(user);
+    navigate('/dashboard');
+  };
+
+  const addTask = () => {
+    const id = Math.max(...tasks.map(t => t.id)) + 1;
+    const newTask = {
+      id,
+      title: `New Task #${id}`,
+      assignee: users[Math.floor(Math.random() * users.length)].name,
+      priority: ['Low', 'Medium', 'High'][Math.floor(Math.random() * 3)],
+      status: 'Pending',
+      deadline: new Date().toISOString(),
+      description: 'Autogenerated placeholder task ready for editing.',
+      comments: [],
+      activity: [{ text: 'Task created', time: 'Just now' }],
+    };
+    setTasks([newTask, ...tasks]);
+    setActivity([{ text: `${currentUser?.name || 'Someone'} created ${newTask.title}`, time: 'Just now' }, ...activity]);
+  };
+
+  const viewTask = (t) => navigate(`/tasks/${t.id}`);
+
+  const editTask = (t) => {
+    const updated = tasks.map(x => x.id === t.id ? { ...x, status: x.status === 'Pending' ? 'In Progress' : x.status === 'In Progress' ? 'Completed' : 'Pending' } : x);
+    setTasks(updated);
+  };
+
+  const deleteTask = (t) => {
+    setTasks(tasks.filter(x => x.id !== t.id));
+  };
+
+  const sortTasks = (field) => {
+    if (field === 'deadline') {
+      const sorted = [...tasks].sort((a,b) => new Date(a.deadline) - new Date(b.deadline));
+      setTasks(sorted);
+    }
+  };
+
+  const addComment = (taskId, text) => {
+    setTasks(tasks.map(t => t.id === taskId ? {
+      ...t,
+      comments: [...(t.comments || []), { text, author: currentUser?.name || 'User', time: 'Just now' }],
+      activity: [{ text: `${currentUser?.name || 'User'} commented`, time: 'Just now' }, ...(t.activity || [])]
+    } : t));
+  };
+
+  const currentTask = useMemo(() => {
+    const match = route.match(/^\/tasks\/(\d+)/);
+    if (match) return tasks.find(t => t.id === Number(match[1]));
+    return null;
+  }, [route, tasks]);
+
+  const currentKey = useMemo(() => {
+    if (route.startsWith('/tasks/')) return 'tasks';
+    return (route.replace('/', '') || 'dashboard');
+  }, [route]);
+
+  // Guard: if not logged in, show auth regardless of route
+  if (!currentUser && !route.startsWith('/login')) {
+    window.location.hash = '/login';
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-zinc-50 to-white dark:from-zinc-950 dark:to-zinc-900 text-zinc-900 dark:text-zinc-100">
+      {/* Auth Screens */}
+      {route.startsWith('/login') && (
+        <Auth onLogin={handleLogin} />
+      )}
+
+      {/* App Layout */}
+      {!route.startsWith('/login') && (
+        <div className="flex">
+          <Sidebar current={currentKey} onNavigate={go} collapsed={sidebarCollapsed} role={currentUser?.role} />
+          <main className="flex-1 min-h-screen">
+            <Navbar
+              onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
+              theme={theme}
+              onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              user={currentUser}
+            />
+
+            {route === '/dashboard' && <Dashboard tasks={tasks} activity={activity} />}
+            {route === '/tasks' && (
+              <Tasks tasks={tasks} onCreate={addTask} onView={viewTask} onEdit={editTask} onDelete={deleteTask} onSort={sortTasks} />
+            )}
+            {route.startsWith('/tasks/') && (
+              <TaskDetails task={currentTask} onBack={() => navigate('/tasks')} onAddComment={addComment} />
+            )}
+            {route === '/teams' && (
+              <Teams
+                users={users}
+                role={currentUser?.role}
+                onCreateUser={({ name, role }) => {
+                  const id = Math.max(...users.map(u => u.id)) + 1;
+                  setUsers([...users, { id, name, role }]);
+                }}
+                onEditUser={(u) => {
+                  const nextRole = u.role === 'Admin' ? 'Manager' : u.role === 'Manager' ? 'Employee' : 'Admin';
+                  setUsers(users.map(x => x.id === u.id ? { ...x, role: nextRole } : x));
+                }}
+                onDeleteUser={(u) => setUsers(users.filter(x => x.id !== u.id))}
+              />
+            )}
+            {route === '/activity' && (
+              <div className="p-6">
+                <h2 className="text-xl font-semibold mb-4">Activity</h2>
+                <div className="space-y-3">
+                  {activity.map((a, i) => (
+                    <div key={i} className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+                      <div className="text-sm">{a.text}</div>
+                      <div className="text-xs text-zinc-500">{a.time}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {route === '/reports' && <Reports tasks={tasks} users={users} />}
+            {route === '/settings' && (
+              <Settings
+                user={currentUser}
+                onUpdateProfile={({ name }) => setCurrentUser({ ...currentUser, name })}
+                onChangePassword={() => alert('Password updated (demo)')}
+                theme={theme}
+                onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              />
+            )}
+          </main>
+        </div>
+      )}
+    </div>
+  );
+}
